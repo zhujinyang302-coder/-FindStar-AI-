@@ -1,0 +1,56 @@
+# 寻物星图 FindStar 本地开发编排（可选）
+# 用法：docker compose -f infra/docker-compose.yml up --build
+# 说明：生产部署请使用华为云 RDS / Redis 等获准资源，并通过环境变量注入密钥。
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: findstar
+      MYSQL_USER: findstar
+      MYSQL_PASSWORD: findstar_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ../backend
+    environment:
+      APP_ENV: development
+      APP_SECRET_KEY: dev-insecure-secret-change-me-min-32-bytes
+      DATABASE_URL: mysql+pymysql://findstar:findstar_pass@db:3306/findstar?charset=utf8mb4
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      AI_PROVIDER: mock
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ../frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
